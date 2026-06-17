@@ -17,6 +17,8 @@ from typing import final
 from docker.models.containers import Container
 from docker.models.images import Image
 
+from sbmdt.pred import Pred
+
 __all__ = [
     'Evaluator',
     'PatchType',
@@ -40,7 +42,7 @@ class PatchType(StrEnum):
     WITHOUT_IMAGE = 'without_image'
 
 
-@dataclass
+@dataclass(kw_only=True)
 class TestResult:
     """Result of a single test case from a benchmark evaluation.
 
@@ -53,6 +55,7 @@ class TestResult:
 
     instance_id: str
     patch_type: PatchType
+    agent_name: str
     test_name: str
     passed: bool
 
@@ -68,16 +71,42 @@ class Evaluator(ABC):
     Attributes:
         image: The Docker image built or used by this evaluator.
         container: The running Docker container managed by this evaluator.
+        patch_type: The patch state this evaluator is running under.
+            Determines whether :meth:`run` calls :meth:`apply_patch`.
+        pred: The model-generated patch to apply, or ``None`` when
+            ``patch_type`` is :attr:`PatchType.BEFORE_PATCH`.
     """
 
     image: Image | None
     container: Container | None
+    patch_type: PatchType
+    pred: Pred | None
 
     @abstractmethod
     def setup(self) -> None:
         """Build the image and start the container.
 
         Implementations should assign ``self.image`` and ``self.container``.
+        """
+        ...
+
+    @abstractmethod
+    def apply_patch(self) -> None:
+        """Apply ``self.pred``'s patch to the evaluation environment.
+
+        Called by :meth:`run` after :meth:`setup` and before
+        :meth:`evaluate`, but only when ``self.patch_type`` is not
+        :attr:`PatchType.BEFORE_PATCH`; when there is no patch to apply,
+        :meth:`run` skips calling this method entirely. ``self.pred`` is
+        therefore guaranteed to be set whenever this is called.
+
+        ``PatchType.WITH_IMAGE`` and ``PatchType.WITHOUT_IMAGE`` only
+        describe how the resulting :class:`TestResult` should be
+        interpreted during analysis; they do not change how the patch
+        itself is applied here.
+
+        Raises:
+            Exception: If the patch fails to apply cleanly.
         """
         ...
 
@@ -154,8 +183,16 @@ class Evaluator(ABC):
             log.error('Error running post-cleanup hook')
 
     @final
-    def run(self):
-        """Run the full evaluation lifecycle: setup, evaluate, then cleanup."""
+    def run(self) -> list[TestResult]:
+        """Run the full evaluation lifecycle.
+
+        Stages: :meth:`setup`, then :meth:`apply_patch` (only when
+        ``self.patch_type`` is not :attr:`PatchType.BEFORE_PATCH`), then
+        :meth:`evaluate`, then :meth:`cleanup`.
+        """
         self.setup()
-        self.evaluate()
+        if self.patch_type != PatchType.BEFORE_PATCH:
+            self.apply_patch()
+        results = self.evaluate()
         self.cleanup()
+        return results

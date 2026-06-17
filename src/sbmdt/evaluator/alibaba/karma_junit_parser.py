@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 
 def results_xml_to_test_results(
-    instance_id: str, patch_type: PatchType, xml_string: str
+    instance_id: str, patch_type: PatchType, agent_name: str, xml_string: str
 ) -> list[TestResult]:
     """Parse a JUnit XML string into a list of :class:`TestResult` objects.
 
@@ -48,6 +48,7 @@ def results_xml_to_test_results(
             TestResult(
                 instance_id=instance_id,
                 patch_type=patch_type,
+                agent_name=agent_name,
                 test_name=test_name,
                 passed=(tc.find('failure') is None),
             )

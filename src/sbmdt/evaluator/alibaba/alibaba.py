@@ -19,13 +19,17 @@ from sbmdt.evaluator.alibaba.karma_junit_parser import (
     results_xml_to_test_results,
 )
 from sbmdt.evaluator.base import Evaluator, PatchType, TestResult
-from sbmdt.utils import apply_change, read_from_container
+from sbmdt.pred import Pred
+from sbmdt.utils import apply_change, read_from_container, write_to_container
 
-__all__ = ['AlibabaEvaluator']
+__all__ = [
+    'AlibabaEvaluator',
+]
 
 log = logging.getLogger(__name__)
 
 KARMA_FILE: Final[str] = '/testbed/scripts/test/karma.js'
+PATCH_FILE: Final[str] = '/tmp/model.patch'
 
 
 class AlibabaEvaluator(Evaluator):
@@ -38,8 +42,17 @@ class AlibabaEvaluator(Evaluator):
 
     instance_id: str
     dockerfile_path: Path
+    patch_type: PatchType
+    agent_name: str
+    pred: Pred | None
 
-    def __init__(self, instance_id: str):
+    def __init__(
+        self,
+        instance_id: str,
+        patch_type: PatchType,
+        agent_name: str,
+        pred: Pred | None,
+    ):
         """Initialize the evaluator for the given instance.
 
         Args:
@@ -49,6 +62,9 @@ class AlibabaEvaluator(Evaluator):
         """
         self.instance_id = instance_id
         self.dockerfile_path = DOCKERFILES_BASE / instance_id / 'Dockerfile'
+        self.patch_type = patch_type
+        self.agent_name = agent_name
+        self.pred = pred
         self.image = None
         self.container = None
 
@@ -124,6 +140,40 @@ class AlibabaEvaluator(Evaluator):
         log.info('All changes applied successfully.')
 
     @override
+    def apply_patch(self) -> None:
+        """Apply ``self.pred.model_patch`` to ``/testbed`` via ``git apply``.
+
+        Writes the patch to a temporary file inside the container and
+        runs ``git apply`` against it from ``/testbed``.
+
+        Raises:
+            Exception: If the container has not been started, or if
+                ``git apply`` exits non-zero.
+        """
+
+        if self.container is None:
+            raise Exception('no container')
+        assert self.pred is not None
+
+        write_to_container(self.container, PATCH_FILE, self.pred.model_patch)
+
+        exit_code, output = self.container.exec_run(
+            f'git apply {PATCH_FILE}',
+            workdir='/testbed',
+            stream=False,
+        )
+        assert isinstance(output, bytes)
+
+        log.info(exit_code)
+        log.info(output.decode())
+
+        if exit_code != 0:
+            raise Exception(
+                f'Failed to apply patch for {self.instance_id}: '
+                f'{output.decode()}'
+            )
+
+    @override
     def evaluate(self) -> list[TestResult]:
         """Run ``npm test`` and retrieve the JUnit XML results.
 
@@ -155,8 +205,9 @@ class AlibabaEvaluator(Evaluator):
 
         return results_xml_to_test_results(
             self.instance_id,
-            patch_type=PatchType.BEFORE_PATCH,
-            xml_string=results,
+            self.patch_type,
+            self.agent_name,
+            results,
         )
 
     @override
