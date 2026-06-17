@@ -1,4 +1,4 @@
-from sbmdt.alibaba import AlibabaEvaluator
+from sbmdt.evaluator.alibaba import AlibabaEvaluator
 
 __all__ = ['evaluate']
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import io
 import tarfile
 
@@ -92,6 +94,25 @@ def write_to_container(container: Container, file: str, content: str) -> None:
 def apply_change(
     container: Container, file: str, find: str, replace: str, assertion: str
 ) -> None:
+    """Apply a single find-and-replace to a file inside a container and verify
+    the result.
+
+    Reads ``file`` from ``container``, replaces the first occurrence of
+    ``find`` with ``replace``, writes it back, then asserts that ``assertion``
+    is present in the updated content.
+
+    Args:
+        container: The running Docker container holding the file.
+        file: Absolute path to the file inside the container.
+        find: Exact string that must exist in the file before the edit.
+        replace: String to substitute for the first occurrence of ``find``.
+        assertion: String that must be present in the file after the edit.
+
+    Raises:
+        Exception: If ``find`` is not found in the original file content.
+        Exception: If ``assertion`` is not found in the file after writing.
+    """
+
     content = read_from_container(container, file)
     if find not in content:
         raise Exception(f'Could not find target string: {repr(find)}')
