@@ -20,7 +20,7 @@ For a given benchmark instance, this project builds a Docker image from the inst
 ```
 dockerfiles/<instance_id>/Dockerfile   # one Dockerfile per benchmark instance
 src/sbmdt/
-  interface.py                         # evaluate(instance_id) entrypoint
+  interface.py                         # evaluation entrypoint
   env.py                               # path constants (project base, dockerfiles dir)
   log.py                               # logging setup
   pred.py                              # Pred: a model-generated patch prediction
