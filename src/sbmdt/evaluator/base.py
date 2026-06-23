@@ -27,11 +27,16 @@ __all__ = [
     'Evaluator',
     'PatchType',
     'TestResult',
+    'LABEL_KEY',
+    'LABEL_VALUE',
 ]
 
 log = logging.getLogger(__name__)
 
 PATCH_FILE: Final[str] = '/tmp/model.patch'
+
+LABEL_KEY = 'ca.maleknazn.sbmdt.managed'
+LABEL_VALUE = 'true'
 
 
 class PatchType(StrEnum):
@@ -137,6 +142,7 @@ class Evaluator(ABC):
         self.image, _ = client.images.build(
             path=str(self.dockerfile_path.parent.resolve()),
             tag=f'sbmdt-{self.instance_id}:latest',
+            labels={LABEL_KEY: LABEL_VALUE},
         )
         self.container = client.containers.run(
             self.image,
@@ -145,6 +151,7 @@ class Evaluator(ABC):
             stdin_open=True,
             tty=True,
             detach=True,
+            labels={LABEL_KEY: LABEL_VALUE},
         )
 
     @abstractmethod
